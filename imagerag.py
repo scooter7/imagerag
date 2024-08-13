@@ -102,7 +102,7 @@ if service:
             st.write("Image Analysis:", analysis)
 
             # Generate refined prompt using GPT-4o-mini
-            completion = client.ChatCompletion.create(
+            completion = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant."},
