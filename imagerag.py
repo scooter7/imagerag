@@ -78,11 +78,8 @@ def analyze_images(images):
 
 def generate_image_with_replicate(prompt, analysis):
     # Use Replicate API to generate an image, incorporating analysis
-    output = replicate.run(
-        st.secrets["REPLICATE_MODEL_ENDPOINTSTABILITY"],
-        input={"prompt": f"{prompt} with {analysis}"},
-        api_token=st.secrets["replicate_api_key"]  # Explicitly pass the API token
-    )
+    model = replicate.models.get(st.secrets["REPLICATE_MODEL_ENDPOINTSTABILITY"])
+    output = model.predict(prompt=f"{prompt} with {analysis}")
     return output[0]  # Assuming the first output is the image URL
 
 # Authenticate and connect to Google Drive
