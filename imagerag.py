@@ -25,6 +25,7 @@ def authenticate_google_drive():
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_config(client_secret, scopes=['https://www.googleapis.com/auth/drive'])
+            flow.redirect_uri = "https://imageragpy-ddyawcsqcvxq3tzjkjfub2.streamlit.app/"
             auth_url, _ = flow.authorization_url(prompt='consent')
             st.write("Please go to the following URL and authorize access:")
             st.write(auth_url)
