@@ -87,7 +87,7 @@ if service:
         prompt = st.text_input("Enter your image creation prompt:")
         if prompt:
             # Generate refined prompt using GPT-4o-mini
-            completion = client.chat.completions.create(
+            completion = client.ChatCompletion.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant."},
@@ -95,7 +95,7 @@ if service:
                 ],
                 max_tokens=50
             )
-            refined_prompt = completion.choices[0].message['content'].strip()
+            refined_prompt = completion.choices[0].message.content.strip()
             st.write("Refined Prompt:", refined_prompt)
 
             # Generate image using Replicate API
