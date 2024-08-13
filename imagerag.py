@@ -12,10 +12,13 @@ import numpy as np
 
 # Set up API keys using Streamlit secrets
 openai.api_key = st.secrets["openai_api_key"]
-replicate.api_key = st.secrets["replicate_api_key"]  # Set the Replicate API key here
+replicate_api_key = st.secrets["replicate_api_key"]  # Set the Replicate API key here
 
 # Initialize the OpenAI client
 client = openai
+
+# Initialize the Replicate client with the API key
+replicate_client = replicate.Client(api_token=replicate_api_key)
 
 # Load client secret from Streamlit secrets
 client_secret = json.loads(st.secrets["google_drive_client_secret"])
@@ -78,8 +81,9 @@ def analyze_images(images):
 
 def generate_image_with_replicate(prompt, analysis):
     # Use Replicate API to generate an image, incorporating analysis
-    output = replicate.run(
-        st.secrets["REPLICATE_MODEL_ENDPOINTSTABILITY"],
+    model_endpoint = st.secrets["REPLICATE_MODEL_ENDPOINTSTABILITY"]  # Ensure this secret is correctly set
+    output = replicate_client.run(
+        model_endpoint,
         input={"prompt": f"{prompt} with {analysis}"}
     )
     return output[0]  # Assuming the first output is the image URL
