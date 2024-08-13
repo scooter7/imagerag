@@ -18,15 +18,20 @@ client_secret = json.loads(st.secrets["google_drive_client_secret"])
 
 def authenticate_google_drive():
     creds = None
-    if st.session_state.get("token"):
+    if "token" in st.session_state:
         creds = Credentials.from_authorized_user_info(st.session_state["token"])
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_config(client_secret, scopes=['https://www.googleapis.com/auth/drive'])
-            creds = flow.run_local_server(port=0)
-        st.session_state["token"] = json.loads(creds.to_json())
+            auth_url, _ = flow.authorization_url(prompt='consent')
+            st.write("Please go to the following URL and authorize access:")
+            st.write(auth_url)
+            auth_code = st.text_input("Enter the authorization code here:")
+            if auth_code:
+                creds = flow.fetch_token(code=auth_code)
+                st.session_state["token"] = json.loads(creds.to_json())
     service = build('drive', 'v3', credentials=creds)
     return service
 
