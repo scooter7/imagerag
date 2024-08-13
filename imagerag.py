@@ -2,8 +2,7 @@ import streamlit as st
 import openai
 import replicate
 from googleapiclient.discovery import build
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request
 import json
 from PIL import Image
@@ -13,7 +12,7 @@ from io import BytesIO
 openai.api_key = st.secrets["openai_api_key"]
 replicate.api_key = st.secrets["replicate_api_key"]
 
-# Google Drive Authentication
+# Load web client secret from Streamlit secrets
 client_secret = json.loads(st.secrets["google_drive_client_secret"])
 
 def authenticate_google_drive():
@@ -24,14 +23,22 @@ def authenticate_google_drive():
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_config(client_secret, scopes=['https://www.googleapis.com/auth/drive'])
+            flow = Flow.from_client_config(
+                client_secret["web"], 
+                scopes=['https://www.googleapis.com/auth/drive']
+            )
+            flow.redirect_uri = "https://imageragpy-ddyawcsqcvxq3tzjkjfub2.streamlit.app/"
+
             auth_url, _ = flow.authorization_url(prompt='consent')
             st.write("Please go to the following URL and authorize access:")
             st.write(auth_url)
+
             auth_code = st.text_input("Enter the authorization code here:")
             if auth_code:
-                creds = flow.fetch_token(code=auth_code)
+                flow.fetch_token(code=auth_code)
+                creds = flow.credentials
                 st.session_state["token"] = json.loads(creds.to_json())
+
     service = build('drive', 'v3', credentials=creds)
     return service
 
