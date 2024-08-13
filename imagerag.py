@@ -2,6 +2,7 @@ import streamlit as st
 import openai
 import replicate
 from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials  # This import is necessary
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 import json
