@@ -84,7 +84,7 @@ if service:
         prompt = st.text_input("Enter your image creation prompt:")
         if prompt:
             # Generate refined prompt using GPT-4o-mini
-            response = client.chat.completions.create(
+            completion = client.chat.completions.create(
                 engine="gpt-4o-mini",
                 prompt=f"Refine the following image creation prompt: {prompt}",
                 max_tokens=50
