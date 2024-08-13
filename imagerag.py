@@ -78,7 +78,7 @@ def analyze_images(images):
 def generate_image_with_replicate(prompt, analysis):
     # Use Replicate API to generate an image, incorporating analysis
     output = replicate.run(
-        model=st.secrets["REPLICATE_MODEL_ENDPOINTSTABILITY"],
+        st.secrets["REPLICATE_MODEL_ENDPOINTSTABILITY"],
         input={"prompt": f"{prompt} with {analysis}"},
         api_token=st.secrets["replicate_api_key"]  # Directly pass the API token here
     )
