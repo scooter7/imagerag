@@ -2,7 +2,7 @@ import streamlit as st
 import openai
 import replicate
 from googleapiclient.discovery import build
-from google.oauth2.credentials import Credentials  # This import is necessary
+from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 import json
@@ -12,6 +12,9 @@ from io import BytesIO
 # Set up API keys using Streamlit secrets
 openai.api_key = st.secrets["openai_api_key"]
 replicate.api_key = st.secrets["replicate_api_key"]
+
+# Initialize the OpenAI client
+client = openai
 
 # Load client secret from Streamlit secrets
 client_secret = json.loads(st.secrets["google_drive_client_secret"])
@@ -89,7 +92,7 @@ if service:
                 prompt=f"Refine the following image creation prompt: {prompt}",
                 max_tokens=50
             )
-            refined_prompt = response.choices[0].text.strip()
+            refined_prompt = completion.choices[0].text.strip()
             st.write("Refined Prompt:", refined_prompt)
 
             # Generate image using Replicate API
