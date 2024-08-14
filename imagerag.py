@@ -160,12 +160,21 @@ if service:
                             )[0]
                             st.image(generated_image_url)
 
+                            # Apply style transfer using one of the images from the folder
+                            style_image = load_image_cached(img_metadata['id'], service)
+                            style_transfer_result = replicate_client.run(
+                                st.secrets["REPLICATE_STYLE_TRANSFER_MODEL_ENDPOINT"],
+                                input={"content_image": generated_image_url, "style_image": style_image}
+                            )[0]
+                            st.image(style_transfer_result, caption="Image after style transfer")
+
                             # Explanation of how images informed the new generation
                             explanation = (
-                                f"The new image was generated based on the analysis of the image. "
-                                f"The description of the image ({description}) was used to create a context, "
-                                f"and the detected emotions ({', '.join(emotions)}) helped shape the mood and tone of the new image. "
-                                f"You can view the original image that informed this generation here: [image]({image_links})."
+                                f"The new image was generated based on a refined prompt informed by the images in the selected folder. "
+                                f"Textual descriptions of the images ({description}) and the detected emotions "
+                                f"({', '.join(emotions)}) were used to refine the original prompt, shaping the content and mood of the new image. "
+                                f"The style of the original image was then applied to the generated image using style transfer. "
+                                f"You can view the original image that influenced this process here: [image]({image_links})."
                             )
                             st.write(explanation)
                         else:
