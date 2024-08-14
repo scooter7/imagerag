@@ -67,7 +67,7 @@ def authenticate_google_drive():
 def list_images_in_folder(folder_id, service):
     results = service.files().list(
         q=f"'{folder_id}' in parents and mimeType contains 'image/'",
-        pageSize=10, fields="files(id, name)").execute()
+        pageSize=10, fields="files(id, name, webViewLink)").execute()
     items = results.get('files', [])
     return items
 
@@ -92,11 +92,12 @@ if service:
     folder_id = st.text_input("Enter the Google Drive folder ID:")
     if folder_id:
         images_metadata = list_images_in_folder(folder_id, service)
-        images = [load_image(img['id'], service) for img in images_metadata]
         all_descriptions = []
         all_emotions = []
+        image_links = []
 
-        for img in images:
+        for img_metadata in images_metadata:
+            img = load_image(img_metadata['id'], service)
             st.image(img)
 
             # Image description
@@ -109,10 +110,13 @@ if service:
             all_emotions.append(emotions)
             st.write("Detected Emotions:", emotions)
 
+            # Store the image link
+            image_links.append(img_metadata['webViewLink'])
+
         prompt = st.text_input("Enter your image creation prompt:")
         if prompt:
             # Combine descriptions and emotions to inform the new image generation
-            combined_analysis = f"Image descriptions: {', '.join(all_descriptions)}. Detected emotions: {', '.join([str(emotion) for emotion in all_emotions])}."
+            combined_analysis = f"Image descriptions: {', '.join(map(str, all_descriptions))}. Detected emotions: {', '.join(map(str, all_emotions))}."
 
             # Generate refined prompt using GPT-4o-mini
             completion = client.chat.completions.create(
@@ -134,9 +138,11 @@ if service:
             st.image(generated_image_url)
 
             # Explanation of how images informed the new generation
+            image_link_list = ', '.join([f"[image]({link})" for link in image_links])
             explanation = (
                 f"The new image was generated based on the analysis of the images in the selected folder. "
-                f"The descriptions of the images ({', '.join(all_descriptions)}) were used to create a context, "
-                f"and the detected emotions ({', '.join([str(emotion) for emotion in all_emotions])}) helped shape the mood and tone of the new image."
+                f"The descriptions of the images ({', '.join(map(str, all_descriptions))}) were used to create a context, "
+                f"and the detected emotions ({', '.join(map(str, all_emotions))}) helped shape the mood and tone of the new image. "
+                f"You can view the original images that informed this generation here: {image_link_list}."
             )
             st.write(explanation)
