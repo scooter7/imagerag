@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision import transforms, models
 import requests  # Added import for requests
+import torch.nn.functional as F
 
 # Set up API keys using Streamlit secrets
 openai.api_key = st.secrets["openai_api_key"]
@@ -65,25 +66,22 @@ def authenticate_google_drive(auth_code=None):
     else:
         return None
 
-# Check if the user is already authenticated
-if "token" not in st.session_state:
-    auth_code = st.text_input("Enter the authorization code here:")
-    service = authenticate_google_drive(auth_code)
-    if service:
-        st.success("Successfully authenticated with Google Drive.")
-else:
-    service = authenticate_google_drive()
-    st.success("You are already authenticated with Google Drive.")
-
 @st.cache_data
 def list_images_in_folder(_service, folder_id):
-    st.write(f"DEBUG: Checking folder ID: {folder_id}")
-    results = _service.files().list(
-        q=f"'{folder_id}' in parents and mimeType contains 'image/'",
-        pageSize=10, fields="files(id, name, mimeType, webViewLink)").execute()
-    items = results.get('files', [])
-    st.write(f"DEBUG: API response: {results}")
-    return items
+    try:
+        st.write(f"DEBUG: Checking folder ID: {folder_id}")
+        results = _service.files().list(
+            q=f"'{folder_id}' in parents and mimeType contains 'image/'",
+            pageSize=10, fields="files(id, name, mimeType, webViewLink)").execute()
+        items = results.get('files', [])
+        st.write(f"DEBUG: API response: {results}")
+        return items
+    except HttpError as error:
+        if error.resp.status == 404:
+            st.error("The specified folder was not found. Please check the folder ID and try again.")
+        else:
+            st.error(f"An error occurred: {error}")
+        return []
 
 @st.cache_data
 def load_image_cached(_service, file_id):
@@ -116,6 +114,33 @@ def detect_emotions(description):
     except Exception as e:
         st.error(f"Error detecting emotions: {e}")
         return None
+
+class ContentLoss(nn.Module):
+    def __init__(self, target):
+        super(ContentLoss, self).__init__()
+        self.target = target.detach()
+        self.loss = 0
+
+    def forward(self, input):
+        self.loss = F.mse_loss(input, self.target)
+        return input
+
+class StyleLoss(nn.Module):
+    def __init__(self, target_feature):
+        super(StyleLoss, self).__init__()
+        self.target = self.gram_matrix(target_feature).detach()
+        self.loss = 0
+
+    def forward(self, input):
+        G = self.gram_matrix(input)
+        self.loss = F.mse_loss(G, self.target)
+        return input
+
+    def gram_matrix(self, input):
+        a, b, c, d = input.size()
+        features = input.view(a * b, c * d)
+        G = torch.mm(features, features.t())
+        return G.div(a * b * c * d)
 
 class StyleTransferModel:
     def __init__(self, content_img, style_img, device):
@@ -163,18 +188,19 @@ class StyleTransferModel:
 
             if name in self.content_layers:
                 target = model(self.content_img).detach()
-                content_loss = nn.MSELoss()(model, target)
+                content_loss = ContentLoss(target)
                 model.add_module(f"content_loss_{i}", content_loss)
                 content_losses.append(content_loss)
 
             if name in self.style_layers:
-                target = model(self.style_img).detach()
-                style_loss = nn.MSELoss()(model, target)
+                target_feature = model(self.style_img).detach()
+                style_loss = StyleLoss(target_feature)
                 model.add_module(f"style_loss_{i}", style_loss)
                 style_losses.append(style_loss)
 
+        # Trimming the model after the last loss layer
         for i in range(len(model) - 1, -1, -1):
-            if isinstance(model[i], nn.MSELoss):
+            if isinstance(model[i], ContentLoss) or isinstance(model[i], StyleLoss):
                 break
         model = model[:i+1]
 
