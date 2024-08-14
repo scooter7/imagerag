@@ -63,10 +63,12 @@ def authenticate_google_drive():
         return None
 
 def list_images_in_folder(folder_id, service):
+    st.write(f"DEBUG: Checking folder ID: {folder_id}")
     results = service.files().list(
         q=f"'{folder_id}' in parents and mimeType contains 'image/'",
         pageSize=10, fields="files(id, name, webViewLink)").execute()
     items = results.get('files', [])
+    st.write(f"DEBUG: API response: {results}")
     return items
 
 def load_image(file_id, service):
