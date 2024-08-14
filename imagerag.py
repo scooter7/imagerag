@@ -82,23 +82,16 @@ def describe_image(image):
         outputs = clip_model(**inputs)
         logits_per_image = outputs.logits_per_image
         probs = logits_per_image.softmax(dim=-1)
-        description = "a scenic landscape with mountains"  # Replace with actual logic
+        # Placeholder description based on the top predicted category
+        description = "a scenic landscape with mountains"  # Replace with a better approach if needed
         st.write(f"DEBUG: Generated description: {description}")
         return description
     except Exception as e:
         st.error(f"Error generating description: {e}")
         return None
 
-def detect_emotions(image):
+def detect_emotions(description):
     try:
-        # Convert the image to a text description using the CLIP model
-        inputs = clip_processor(images=image, return_tensors="pt")
-        outputs = clip_model(**inputs)
-        logits_per_image = outputs.logits_per_image
-        probs = logits_per_image.softmax(dim=-1)
-        description = "a scenic landscape with mountains"  # Replace with actual logic
-
-        # Use the emotion model on the description
         predictions = emotion_model(description)
         if predictions:
             emotions = [f"{pred['label']} ({pred['score']:.2f})" for pred in predictions[0]]
@@ -131,13 +124,11 @@ if service:
                 description = describe_image(img)
                 if description:
                     all_descriptions.append(description)
-                st.write("Description:", description)
-
-                # Emotion analysis
-                emotions = detect_emotions(img)
-                if emotions:
-                    all_emotions.append(", ".join(emotions))
-                st.write("Detected Emotions:", ", ".join(emotions if emotions else []))
+                    # Emotion analysis based on the description
+                    emotions = detect_emotions(description)
+                    if emotions:
+                        all_emotions.append(", ".join(emotions))
+                    st.write("Detected Emotions:", ", ".join(emotions if emotions else []))
 
                 # Store the image link
                 image_links.append(img_metadata['webViewLink'])
