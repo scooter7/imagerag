@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import transforms, models
-import requests  # Added import for requests
+import requests
 import torch.nn.functional as F
 
 # Set up API keys using Streamlit secrets
@@ -31,7 +31,7 @@ blip_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning
 blip_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
 
 # Initialize emotion detection pipeline using the "j-hartmann/emotion-english-distilroberta-base" model
-emotion_model = pipeline("text-classification", model="j-hartmann/emotion-english-distilroberta-base", return_all_scores=True)
+emotion_model = pipeline("text-classification", model="j-hartmann/emotion-english-distilroberta-base", top_k=None)
 
 # Load client secret from Streamlit secrets
 client_secret = json.loads(st.secrets["google_drive_client_secret"])
@@ -105,7 +105,7 @@ def load_image_cached(_service, file_id):
 def describe_image(image):
     try:
         inputs = blip_processor(images=image, return_tensors="pt")
-        out = blip_model.generate(**inputs)
+        out = blip_model.generate(**inputs, max_new_tokens=50)
         description = blip_processor.decode(out[0], skip_special_tokens=True)
         st.write(f"DEBUG: Generated description: {description}")
         return description
@@ -159,7 +159,7 @@ class StyleTransferModel:
         self.device = device
         self.content_img = self.image_loader(content_img).to(self.device, torch.float)
         self.style_img = self.image_loader(style_img).to(self.device, torch.float)
-        self.cnn = models.vgg19(pretrained=True).features.to(self.device).eval()
+        self.cnn = models.vgg19(weights=models.VGG19_Weights.IMAGENET1K_V1).features.to(self.device).eval()
 
         self.content_layers = ['conv_4']
         self.style_layers = ['conv_1', 'conv_2', 'conv_3', 'conv_4', 'conv_5']
@@ -319,14 +319,13 @@ if service:
                             st.image(output_image, caption="Image after PyTorch Style Transfer")
 
                             # Explanation of how images informed the new generation
-                            explanation = (
+                            st.write(
                                 f"The new image was generated based on a refined prompt informed by the images in the selected folder. "
                                 f"Textual descriptions of the images ({description}) and the detected emotions "
                                 f"({', '.join(emotions)}) were used to refine the original prompt, shaping the content and mood of the new image. "
                                 f"The style of the original image was then applied to the generated image using neural style transfer with PyTorch. "
                                 f"You can view the original image that influenced this process here: [image]({image_links})."
                             )
-                            st.write(explanation)
                         else:
                             st.write("DEBUG: Analysis and generation were not triggered.")
                     else:
