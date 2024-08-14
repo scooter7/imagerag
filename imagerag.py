@@ -1,13 +1,13 @@
 import streamlit as st
 import openai
 import replicate
-from transformers import CLIPProcessor, CLIPModel, pipeline
+from transformers import BlipProcessor, BlipForConditionalGeneration, pipeline
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 import json
-from PIL import Image, ImageOps
+from PIL import Image
 from io import BytesIO
 
 # Set up API keys using Streamlit secrets
@@ -20,9 +20,9 @@ client = openai
 # Initialize the Replicate client with the API key
 replicate_client = replicate.Client(api_token=replicate_api_key)
 
-# Initialize CLIP model for image captioning
-clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+# Initialize BLIP model for image captioning
+blip_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+blip_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
 
 # Initialize emotion detection pipeline using the "j-hartmann/emotion-english-distilroberta-base" model
 emotion_model = pipeline("text-classification", model="j-hartmann/emotion-english-distilroberta-base", return_all_scores=True)
@@ -78,12 +78,9 @@ def load_image(file_id, service):
 
 def describe_image(image):
     try:
-        inputs = clip_processor(images=image, return_tensors="pt")
-        outputs = clip_model(**inputs)
-        logits_per_image = outputs.logits_per_image
-        probs = logits_per_image.softmax(dim=-1)
-        # Placeholder description based on the top predicted category
-        description = "a scenic landscape with mountains"  # Replace with a better approach if needed
+        inputs = blip_processor(images=image, return_tensors="pt")
+        out = blip_model.generate(**inputs)
+        description = blip_processor.decode(out[0], skip_special_tokens=True)
         st.write(f"DEBUG: Generated description: {description}")
         return description
     except Exception as e:
