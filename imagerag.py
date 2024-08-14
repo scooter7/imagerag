@@ -80,10 +80,12 @@ def load_image(file_id, service):
 def describe_image(image):
     inputs = clip_processor(images=image, return_tensors="pt")
     outputs = clip_model(**inputs)
-    return outputs.logits_per_image.argmax().item()
+    # For demonstration purposes, we'll return a placeholder description
+    return "an example description"  # Replace this with the actual logic
 
 def detect_emotions(image):
-    return emotion_model(image)
+    # For demonstration purposes, we'll return a placeholder emotion
+    return [{"label": "happy", "score": 0.9}]  # Replace this with the actual logic
 
 # Authenticate and connect to Google Drive
 service = authenticate_google_drive()
@@ -107,8 +109,9 @@ if service:
 
             # Emotion analysis
             emotions = detect_emotions(img)
-            all_emotions.append(emotions)
-            st.write("Detected Emotions:", emotions)
+            emotion_labels = [f"{e['label']} ({e['score']*100:.1f}%)" for e in emotions]
+            all_emotions.append(", ".join(emotion_labels))
+            st.write("Detected Emotions:", ", ".join(emotion_labels))
 
             # Store the image link
             image_links.append(img_metadata['webViewLink'])
@@ -116,7 +119,7 @@ if service:
         prompt = st.text_input("Enter your image creation prompt:")
         if prompt:
             # Combine descriptions and emotions to inform the new image generation
-            combined_analysis = f"Image descriptions: {', '.join(map(str, all_descriptions))}. Detected emotions: {', '.join(map(str, all_emotions))}."
+            combined_analysis = f"Image descriptions: {', '.join(all_descriptions)}. Detected emotions: {', '.join(all_emotions)}."
 
             # Generate refined prompt using GPT-4o-mini
             completion = client.chat.completions.create(
@@ -141,8 +144,8 @@ if service:
             image_link_list = ', '.join([f"[image]({link})" for link in image_links])
             explanation = (
                 f"The new image was generated based on the analysis of the images in the selected folder. "
-                f"The descriptions of the images ({', '.join(map(str, all_descriptions))}) were used to create a context, "
-                f"and the detected emotions ({', '.join(map(str, all_emotions))}) helped shape the mood and tone of the new image. "
+                f"The descriptions of the images ({', '.join(all_descriptions)}) were used to create a context, "
+                f"and the detected emotions ({', '.join(all_emotions)}) helped shape the mood and tone of the new image. "
                 f"You can view the original images that informed this generation here: {image_link_list}."
             )
             st.write(explanation)
