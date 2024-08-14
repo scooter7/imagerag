@@ -9,6 +9,10 @@ from google.auth.transport.requests import Request
 import json
 from PIL import Image
 from io import BytesIO
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torchvision import transforms, models
 
 # Set up API keys using Streamlit secrets
 openai.api_key = st.secrets["openai_api_key"]
@@ -104,6 +108,105 @@ def detect_emotions(description):
         st.error(f"Error detecting emotions: {e}")
         return None
 
+class StyleTransferModel:
+    def __init__(self, content_img, style_img, device):
+        self.device = device
+        self.content_img = self.image_loader(content_img).to(self.device, torch.float)
+        self.style_img = self.image_loader(style_img).to(self.device, torch.float)
+        self.cnn = models.vgg19(pretrained=True).features.to(self.device).eval()
+
+        self.content_layers = ['conv_4']
+        self.style_layers = ['conv_1', 'conv_2', 'conv_3', 'conv_4', 'conv_5']
+        self.content_weight = 1
+        self.style_weight = 1000000
+
+        self.model, self.style_losses, self.content_losses = self.get_style_model_and_losses()
+
+    def image_loader(self, image):
+        loader = transforms.Compose([
+            transforms.Resize((512, 512)),
+            transforms.ToTensor()])
+        image = loader(image).unsqueeze(0)
+        return image
+
+    def get_style_model_and_losses(self):
+        cnn = self.cnn
+        content_losses = []
+        style_losses = []
+
+        model = nn.Sequential()
+        i = 0  
+        for layer in cnn.children():
+            if isinstance(layer, nn.Conv2d):
+                i += 1
+                name = f"conv_{i}"
+            elif isinstance(layer, nn.ReLU):
+                name = f"relu_{i}"
+                layer = nn.ReLU(inplace=False)
+            elif isinstance(layer, nn.MaxPool2d):
+                name = f"pool_{i}"
+            elif isinstance(layer, nn.BatchNorm2d):
+                name = f"bn_{i}"
+            else:
+                raise RuntimeError(f"Unrecognized layer: {layer.__class__.__name__}")
+
+            model.add_module(name, layer)
+
+            if name in self.content_layers:
+                target = model(self.content_img).detach()
+                content_loss = nn.MSELoss()(model, target)
+                model.add_module(f"content_loss_{i}", content_loss)
+                content_losses.append(content_loss)
+
+            if name in self.style_layers:
+                target = model(self.style_img).detach()
+                style_loss = nn.MSELoss()(model, target)
+                model.add_module(f"style_loss_{i}", style_loss)
+                style_losses.append(style_loss)
+
+        for i in range(len(model) - 1, -1, -1):
+            if isinstance(model[i], nn.MSELoss):
+                break
+        model = model[:i+1]
+
+        return model, style_losses, content_losses
+
+    def run_style_transfer(self, num_steps=300):
+        input_img = self.content_img.clone()
+        optimizer = optim.LBFGS([input_img.requires_grad_()])
+
+        run = [0]
+        while run[0] <= num_steps:
+            def closure():
+                input_img.data.clamp_(0, 1)
+
+                optimizer.zero_grad()
+                self.model(input_img)
+                style_score = 0
+                content_score = 0
+
+                for sl in self.style_losses:
+                    style_score += sl.loss
+                for cl in self.content_losses:
+                    content_score += cl.loss
+
+                loss = style_score * self.style_weight + content_score * self.content_weight
+                loss.backward()
+
+                run[0] += 1
+                return style_score + content_score
+
+            optimizer.step(closure)
+
+        input_img.data.clamp_(0, 1)
+        return input_img
+
+def perform_style_transfer(content_image, style_image):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = StyleTransferModel(content_image, style_image, device)
+    output = model.run_style_transfer()
+    return output
+
 # Authenticate and connect to Google Drive
 service = authenticate_google_drive()
 
@@ -158,22 +261,22 @@ if service:
                                 st.secrets["REPLICATE_MODEL_ENDPOINTSTABILITY"],
                                 input={"prompt": refined_prompt}
                             )[0]
-                            st.image(generated_image_url)
+                            generated_image = Image.open(requests.get(generated_image_url, stream=True).raw)
+                            st.image(generated_image)
 
-                            # Apply style transfer using one of the images from the folder
+                            # Apply neural style transfer using PyTorch
                             style_image = load_image_cached(service, img_metadata['id'])
-                            style_transfer_result = replicate_client.run(
-                                st.secrets["REPLICATE_STYLE_TRANSFER_MODEL_ENDPOINT"],
-                                input={"content_image": generated_image_url, "style_image": style_image}
-                            )[0]
-                            st.image(style_transfer_result, caption="Image after style transfer")
+                            output_image_tensor = perform_style_transfer(generated_image, style_image)
+
+                            output_image = transforms.ToPILImage()(output_image_tensor.squeeze(0))
+                            st.image(output_image, caption="Image after PyTorch Style Transfer")
 
                             # Explanation of how images informed the new generation
                             explanation = (
                                 f"The new image was generated based on a refined prompt informed by the images in the selected folder. "
                                 f"Textual descriptions of the images ({description}) and the detected emotions "
                                 f"({', '.join(emotions)}) were used to refine the original prompt, shaping the content and mood of the new image. "
-                                f"The style of the original image was then applied to the generated image using style transfer. "
+                                f"The style of the original image was then applied to the generated image using neural style transfer with PyTorch. "
                                 f"You can view the original image that influenced this process here: [image]({image_links})."
                             )
                             st.write(explanation)
