@@ -63,9 +63,9 @@ def authenticate_google_drive():
         return None
 
 @st.cache_data
-def list_images_in_folder(folder_id, service):
+def list_images_in_folder(_service, folder_id):
     st.write(f"DEBUG: Checking folder ID: {folder_id}")
-    results = service.files().list(
+    results = _service.files().list(
         q=f"'{folder_id}' in parents and mimeType contains 'image/'",
         pageSize=10, fields="files(id, name, mimeType, webViewLink)").execute()
     items = results.get('files', [])
@@ -73,8 +73,8 @@ def list_images_in_folder(folder_id, service):
     return items
 
 @st.cache_data
-def load_image_cached(file_id, service):
-    request = service.files().get_media(fileId=file_id)
+def load_image_cached(_service, file_id):
+    request = _service.files().get_media(fileId=file_id)
     img_data = request.execute()
     img = Image.open(BytesIO(img_data))
     return img
@@ -110,7 +110,7 @@ service = authenticate_google_drive()
 if service:
     folder_id = st.text_input("Enter the Google Drive folder ID:")
     if folder_id:
-        images_metadata = list_images_in_folder(folder_id, service)
+        images_metadata = list_images_in_folder(service, folder_id)
         
         if images_metadata:
             selected_image = st.selectbox(
@@ -120,7 +120,7 @@ if service:
 
             if selected_image:
                 img_metadata = next(img for img in images_metadata if img['name'] == selected_image)
-                img = load_image_cached(img_metadata['id'], service)
+                img = load_image_cached(service, img_metadata['id'])
                 st.image(img)
 
                 # Image description
@@ -161,7 +161,7 @@ if service:
                             st.image(generated_image_url)
 
                             # Apply style transfer using one of the images from the folder
-                            style_image = load_image_cached(img_metadata['id'], service)
+                            style_image = load_image_cached(service, img_metadata['id'])
                             style_transfer_result = replicate_client.run(
                                 st.secrets["REPLICATE_STYLE_TRANSFER_MODEL_ENDPOINT"],
                                 input={"content_image": generated_image_url, "style_image": style_image}
