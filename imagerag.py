@@ -24,8 +24,8 @@ replicate_client = replicate.Client(api_token=replicate_api_key)
 clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
 clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-# Initialize emotion detection pipeline using a model trained for emotion recognition
-emotion_model = pipeline("image-classification", model="arpanghoshal/EmoRoBERTa")
+# Initialize an alternative emotion detection pipeline using the "nateraw/ferplus" model
+emotion_model = pipeline("image-classification", model="nateraw/ferplus")
 
 # Load client secret from Streamlit secrets
 client_secret = json.loads(st.secrets["google_drive_client_secret"])
@@ -35,7 +35,7 @@ def authenticate_google_drive():
     if "token" in st.session_state:
         creds = Credentials.from_authorized_user_info(st.session_state["token"])
     if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:  # Corrected this line
+        if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_config(
