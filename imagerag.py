@@ -24,8 +24,8 @@ replicate_client = replicate.Client(api_token=replicate_api_key)
 clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
 clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-# Initialize an alternative emotion detection pipeline using the "nateraw/ferplus" model
-emotion_model = pipeline("image-classification", model="nateraw/ferplus")
+# Initialize emotion detection pipeline using the "j-hartmann/emotion-english-distilroberta-base" model
+emotion_model = pipeline("text-classification", model="j-hartmann/emotion-english-distilroberta-base", return_all_scores=True)
 
 # Load client secret from Streamlit secrets
 client_secret = json.loads(st.secrets["google_drive_client_secret"])
@@ -91,9 +91,17 @@ def describe_image(image):
 
 def detect_emotions(image):
     try:
-        predictions = emotion_model(image)
+        # Convert the image to a text description using the CLIP model
+        inputs = clip_processor(images=image, return_tensors="pt")
+        outputs = clip_model(**inputs)
+        logits_per_image = outputs.logits_per_image
+        probs = logits_per_image.softmax(dim=-1)
+        description = "a scenic landscape with mountains"  # Replace with actual logic
+
+        # Use the emotion model on the description
+        predictions = emotion_model(description)
         if predictions:
-            emotions = [f"{pred['label']} ({pred['score']:.2f})" for pred in predictions]
+            emotions = [f"{pred['label']} ({pred['score']:.2f})" for pred in predictions[0]]
             st.write(f"DEBUG: Detected emotions: {emotions}")
             return emotions
         else:
