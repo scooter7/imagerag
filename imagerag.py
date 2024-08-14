@@ -77,22 +77,30 @@ def load_image(file_id, service):
     return img
 
 def describe_image(image):
-    # Use CLIP to generate a description for the image
-    inputs = clip_processor(images=image, return_tensors="pt")
-    outputs = clip_model(**inputs)
-    logits_per_image = outputs.logits_per_image
-    probs = logits_per_image.softmax(dim=-1)
-    # For demonstration purposes, returning a mock description
-    description = "a scenic landscape with mountains"  # Replace with actual description logic
-    st.write(f"DEBUG: Generated description: {description}")
-    return description
+    try:
+        # Use CLIP to generate a description for the image
+        inputs = clip_processor(images=image, return_tensors="pt")
+        outputs = clip_model(**inputs)
+        logits_per_image = outputs.logits_per_image
+        probs = logits_per_image.softmax(dim=-1)
+        # Assuming 'probs' returns some form of interpretable text
+        description = "a scenic landscape with mountains"  # Replace with actual logic
+        st.write(f"DEBUG: Generated description: {description}")
+        return description
+    except Exception as e:
+        st.error(f"Error generating description: {e}")
+        return None
 
 def detect_emotions(image):
-    # Use the emotion model to detect emotions in the image
-    predictions = emotion_model(image)
-    emotions = [f"{pred['label']} ({pred['score']:.2f})" for pred in predictions]
-    st.write(f"DEBUG: Detected emotions: {emotions}")
-    return emotions
+    try:
+        # Use the emotion model to detect emotions in the image
+        predictions = emotion_model(image)
+        emotions = [f"{pred['label']} ({pred['score']:.2f})" for pred in predictions]
+        st.write(f"DEBUG: Detected emotions: {emotions}")
+        return emotions
+    except Exception as e:
+        st.error(f"Error detecting emotions: {e}")
+        return None
 
 # Authenticate and connect to Google Drive
 service = authenticate_google_drive()
