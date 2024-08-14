@@ -10,7 +10,6 @@ from google.auth.transport.requests import Request
 import json
 from PIL import Image, ImageOps
 from io import BytesIO
-import numpy as np
 
 # Set up API keys using Streamlit secrets
 openai.api_key = st.secrets["openai_api_key"]
@@ -78,14 +77,20 @@ def load_image(file_id, service):
     return img
 
 def describe_image(image):
+    # Use CLIP to generate a description for the image
     inputs = clip_processor(images=image, return_tensors="pt")
     outputs = clip_model(**inputs)
-    # For demonstration purposes, we'll return a placeholder description
-    return "an example description"  # Replace this with the actual logic
+    logits_per_image = outputs.logits_per_image
+    probs = logits_per_image.softmax(dim=-1)
+    # Assuming 'probs' returns some form of interpretable text
+    # For demonstration, returning a mock description
+    return "a scenic landscape with mountains"  # Replace with actual description logic
 
 def detect_emotions(image):
-    # For demonstration purposes, we'll return a placeholder emotion
-    return [{"label": "happy", "score": 0.9}]  # Replace this with the actual logic
+    # Use the emotion model to detect emotions in the image
+    predictions = emotion_model(image)
+    emotions = [f"{pred['label']} ({pred['score']:.2f})" for pred in predictions]
+    return emotions
 
 # Authenticate and connect to Google Drive
 service = authenticate_google_drive()
@@ -109,9 +114,8 @@ if service:
 
             # Emotion analysis
             emotions = detect_emotions(img)
-            emotion_labels = [f"{e['label']} ({e['score']*100:.1f}%)" for e in emotions]
-            all_emotions.append(", ".join(emotion_labels))
-            st.write("Detected Emotions:", ", ".join(emotion_labels))
+            all_emotions.append(", ".join(emotions))
+            st.write("Detected Emotions:", ", ".join(emotions))
 
             # Store the image link
             image_links.append(img_metadata['webViewLink'])
