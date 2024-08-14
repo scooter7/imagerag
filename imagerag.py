@@ -91,9 +91,13 @@ def describe_image(image):
 def detect_emotions(image):
     try:
         predictions = emotion_model(image)
-        emotions = [f"{pred['label']} ({pred['score']:.2f})" for pred in predictions]
-        st.write(f"DEBUG: Detected emotions: {emotions}")
-        return emotions
+        if predictions:
+            emotions = [f"{pred['label']} ({pred['score']:.2f})" for pred in predictions]
+            st.write(f"DEBUG: Detected emotions: {emotions}")
+            return emotions
+        else:
+            st.write("DEBUG: No emotions detected.")
+            return None
     except Exception as e:
         st.error(f"Error detecting emotions: {e}")
         return None
@@ -109,50 +113,53 @@ if service:
         all_emotions = []
         image_links = []
 
-        for img_metadata in images_metadata:
-            img = load_image(img_metadata['id'], service)
-            st.image(img)
+        if images_metadata:
+            for img_metadata in images_metadata:
+                img = load_image(img_metadata['id'], service)
+                st.image(img)
 
-            # Image description
-            description = describe_image(img)
-            if description:
-                all_descriptions.append(description)
-            st.write("Description:", description)
+                # Image description
+                description = describe_image(img)
+                if description:
+                    all_descriptions.append(description)
+                st.write("Description:", description)
 
-            # Emotion analysis
-            emotions = detect_emotions(img)
-            if emotions:
-                all_emotions.append(", ".join(emotions))
-            st.write("Detected Emotions:", ", ".join(emotions))
+                # Emotion analysis
+                emotions = detect_emotions(img)
+                if emotions:
+                    all_emotions.append(", ".join(emotions))
+                st.write("Detected Emotions:", ", ".join(emotions if emotions else []))
 
-            # Store the image link
-            image_links.append(img_metadata['webViewLink'])
+                # Store the image link
+                image_links.append(img_metadata['webViewLink'])
+        else:
+            st.write("DEBUG: No images found in the folder.")
 
-        prompt = st.text_input("Enter your image creation prompt:")
-        if prompt:
-            combined_analysis = f"Image descriptions: {', '.join(all_descriptions)}. Detected emotions: {', '.join(all_emotions)}."
+        if all_descriptions or all_emotions:
+            prompt = st.text_input("Enter your image creation prompt:")
+            if prompt:
+                combined_analysis = f"Image descriptions: {', '.join(all_descriptions)}. Detected emotions: {', '.join(all_emotions)}."
 
-            # Generate refined prompt using GPT-4o-mini
-            completion = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": f"Refine the following image creation prompt: {prompt} with analysis: {combined_analysis}"}
-                ],
-                max_tokens=50
-            )
-            refined_prompt = completion.choices[0].message.content.strip()
-            st.write("Refined Prompt:", refined_prompt)
+                # Generate refined prompt using GPT-4o-mini
+                completion = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant."},
+                        {"role": "user", "content": f"Refine the following image creation prompt: {prompt} with analysis: {combined_analysis}"}
+                    ],
+                    max_tokens=50
+                )
+                refined_prompt = completion.choices[0].message.content.strip()
+                st.write("Refined Prompt:", refined_prompt)
 
-            # Generate image using Replicate API
-            generated_image_url = replicate_client.run(
-                st.secrets["REPLICATE_MODEL_ENDPOINTSTABILITY"],
-                input={"prompt": refined_prompt}
-            )[0]
-            st.image(generated_image_url)
+                # Generate image using Replicate API
+                generated_image_url = replicate_client.run(
+                    st.secrets["REPLICATE_MODEL_ENDPOINTSTABILITY"],
+                    input={"prompt": refined_prompt}
+                )[0]
+                st.image(generated_image_url)
 
-            # Explanation of how images informed the new generation
-            if all_descriptions and all_emotions:
+                # Explanation of how images informed the new generation
                 image_link_list = ', '.join([f"[image]({link})" for link in image_links])
                 explanation = (
                     f"The new image was generated based on the analysis of the images in the selected folder. "
@@ -162,4 +169,6 @@ if service:
                 )
                 st.write(explanation)
             else:
-                st.write("DEBUG: Descriptions or emotions were not captured correctly.")
+                st.write("DEBUG: No prompt provided.")
+        else:
+            st.write("DEBUG: Descriptions or emotions were not captured correctly.")
