@@ -93,25 +93,33 @@ if service:
     if folder_id:
         images_metadata = list_images_in_folder(folder_id, service)
         images = [load_image(img['id'], service) for img in images_metadata]
+        all_descriptions = []
+        all_emotions = []
+
         for img in images:
             st.image(img)
 
             # Image description
             description = describe_image(img)
+            all_descriptions.append(description)
             st.write("Description:", description)
 
             # Emotion analysis
             emotions = detect_emotions(img)
+            all_emotions.append(emotions)
             st.write("Detected Emotions:", emotions)
 
         prompt = st.text_input("Enter your image creation prompt:")
         if prompt:
+            # Combine descriptions and emotions to inform the new image generation
+            combined_analysis = f"Image descriptions: {', '.join(all_descriptions)}. Detected emotions: {', '.join([str(emotion) for emotion in all_emotions])}."
+
             # Generate refined prompt using GPT-4o-mini
             completion = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": f"Refine the following image creation prompt: {prompt}"}
+                    {"role": "user", "content": f"Refine the following image creation prompt: {prompt} with analysis: {combined_analysis}"}
                 ],
                 max_tokens=50
             )
@@ -124,3 +132,11 @@ if service:
                 input={"prompt": refined_prompt}
             )[0]
             st.image(generated_image_url)
+
+            # Explanation of how images informed the new generation
+            explanation = (
+                f"The new image was generated based on the analysis of the images in the selected folder. "
+                f"The descriptions of the images ({', '.join(all_descriptions)}) were used to create a context, "
+                f"and the detected emotions ({', '.join([str(emotion) for emotion in all_emotions])}) helped shape the mood and tone of the new image."
+            )
+            st.write(explanation)
