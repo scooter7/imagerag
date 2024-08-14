@@ -50,11 +50,11 @@ def authenticate_google_drive(auth_code=None):
             )
             flow.redirect_uri = client_secret["installed"]["redirect_uris"][0]
 
-            auth_url, _ = flow.authorization_url(prompt='consent')
-            st.write("Please go to the following URL and authorize access:")
-            st.write(auth_url)
-
-            if auth_code:
+            if not auth_code:
+                auth_url, _ = flow.authorization_url(prompt='consent')
+                st.write("Please go to the following URL and authorize access:")
+                st.write(auth_url)
+            else:
                 flow.fetch_token(code=auth_code)
                 creds = flow.credentials
                 st.session_state["token"] = json.loads(creds.to_json())
@@ -63,14 +63,17 @@ def authenticate_google_drive(auth_code=None):
         service = build('drive', 'v3', credentials=creds)
         return service
     else:
-        st.error("Failed to authenticate with Google Drive.")
         return None
 
-# Outside of the cached function
-auth_code = st.text_input("Enter the authorization code here:")
-
-# Pass the auth_code to the authenticate_google_drive function
-service = authenticate_google_drive(auth_code)
+# Check if the user is already authenticated
+if "token" not in st.session_state:
+    auth_code = st.text_input("Enter the authorization code here:")
+    service = authenticate_google_drive(auth_code)
+    if service:
+        st.success("Successfully authenticated with Google Drive.")
+else:
+    service = authenticate_google_drive()
+    st.success("You are already authenticated with Google Drive.")
 
 @st.cache_data
 def list_images_in_folder(_service, folder_id):
