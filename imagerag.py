@@ -82,14 +82,16 @@ def describe_image(image):
     outputs = clip_model(**inputs)
     logits_per_image = outputs.logits_per_image
     probs = logits_per_image.softmax(dim=-1)
-    # Assuming 'probs' returns some form of interpretable text
-    # For demonstration, returning a mock description
-    return "a scenic landscape with mountains"  # Replace with actual description logic
+    # For demonstration purposes, returning a mock description
+    description = "a scenic landscape with mountains"  # Replace with actual description logic
+    st.write(f"DEBUG: Generated description: {description}")
+    return description
 
 def detect_emotions(image):
     # Use the emotion model to detect emotions in the image
     predictions = emotion_model(image)
     emotions = [f"{pred['label']} ({pred['score']:.2f})" for pred in predictions]
+    st.write(f"DEBUG: Detected emotions: {emotions}")
     return emotions
 
 # Authenticate and connect to Google Drive
@@ -109,12 +111,14 @@ if service:
 
             # Image description
             description = describe_image(img)
-            all_descriptions.append(description)
+            if description:
+                all_descriptions.append(description)
             st.write("Description:", description)
 
             # Emotion analysis
             emotions = detect_emotions(img)
-            all_emotions.append(", ".join(emotions))
+            if emotions:
+                all_emotions.append(", ".join(emotions))
             st.write("Detected Emotions:", ", ".join(emotions))
 
             # Store the image link
@@ -145,11 +149,14 @@ if service:
             st.image(generated_image_url)
 
             # Explanation of how images informed the new generation
-            image_link_list = ', '.join([f"[image]({link})" for link in image_links])
-            explanation = (
-                f"The new image was generated based on the analysis of the images in the selected folder. "
-                f"The descriptions of the images ({', '.join(all_descriptions)}) were used to create a context, "
-                f"and the detected emotions ({', '.join(all_emotions)}) helped shape the mood and tone of the new image. "
-                f"You can view the original images that informed this generation here: {image_link_list}."
-            )
-            st.write(explanation)
+            if all_descriptions and all_emotions:
+                image_link_list = ', '.join([f"[image]({link})" for link in image_links])
+                explanation = (
+                    f"The new image was generated based on the analysis of the images in the selected folder. "
+                    f"The descriptions of the images ({', '.join(all_descriptions)}) were used to create a context, "
+                    f"and the detected emotions ({', '.join(all_emotions)}) helped shape the mood and tone of the new image. "
+                    f"You can view the original images that informed this generation here: {image_link_list}."
+                )
+                st.write(explanation)
+            else:
+                st.write("DEBUG: Descriptions or emotions were not captured correctly.")
