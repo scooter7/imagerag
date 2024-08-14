@@ -30,6 +30,7 @@ emotion_model = pipeline("text-classification", model="j-hartmann/emotion-englis
 # Load client secret from Streamlit secrets
 client_secret = json.loads(st.secrets["google_drive_client_secret"])
 
+@st.cache_data
 def authenticate_google_drive():
     creds = None
     if "token" in st.session_state:
@@ -61,16 +62,18 @@ def authenticate_google_drive():
         st.error("Failed to authenticate with Google Drive.")
         return None
 
+@st.cache_data
 def list_images_in_folder(folder_id, service):
     st.write(f"DEBUG: Checking folder ID: {folder_id}")
     results = service.files().list(
-        q=f"'{folder_id}' in parents",
+        q=f"'{folder_id}' in parents and mimeType contains 'image/'",
         pageSize=10, fields="files(id, name, mimeType, webViewLink)").execute()
     items = results.get('files', [])
     st.write(f"DEBUG: API response: {results}")
     return items
 
-def load_image(file_id, service):
+@st.cache_data
+def load_image_cached(file_id, service):
     request = service.files().get_media(fileId=file_id)
     img_data = request.execute()
     img = Image.open(BytesIO(img_data))
@@ -108,64 +111,68 @@ if service:
     folder_id = st.text_input("Enter the Google Drive folder ID:")
     if folder_id:
         images_metadata = list_images_in_folder(folder_id, service)
-        all_descriptions = []
-        all_emotions = []
-        image_links = []
-
+        
         if images_metadata:
-            for img_metadata in images_metadata:
-                img = load_image(img_metadata['id'], service)
+            selected_image = st.selectbox(
+                "Select an image to process", 
+                [img['name'] for img in images_metadata]
+            )
+
+            if selected_image:
+                img_metadata = next(img for img in images_metadata if img['name'] == selected_image)
+                img = load_image_cached(img_metadata['id'], service)
                 st.image(img)
 
                 # Image description
                 description = describe_image(img)
                 if description:
-                    all_descriptions.append(description)
                     # Emotion analysis based on the description
                     emotions = detect_emotions(description)
                     if emotions:
-                        all_emotions.append(", ".join(emotions))
-                    st.write("Detected Emotions:", ", ".join(emotions if emotions else []))
+                        st.write("Detected Emotions:", ", ".join(emotions if emotions else []))
+                    
+                    # Store the image link
+                    image_links = img_metadata['webViewLink']
+                    
+                    # Allow user to input a prompt for image creation
+                    prompt = st.text_input("Enter your image creation prompt:")
+                    if prompt:
+                        combined_analysis = f"Image description: {description}. Detected emotions: {', '.join(emotions)}."
+                        
+                        proceed = st.button("Analyze and Generate Image")
+                        if proceed:
+                            # Generate refined prompt using GPT-4o-mini
+                            completion = client.chat.completions.create(
+                                model="gpt-4o-mini",
+                                messages=[
+                                    {"role": "system", "content": "You are a helpful assistant."},
+                                    {"role": "user", "content": f"Refine the following image creation prompt: {prompt} with analysis: {combined_analysis}"}
+                                ],
+                                max_tokens=30  # Reduced token limit
+                            )
+                            refined_prompt = completion.choices[0].message.content.strip()
+                            st.write("Refined Prompt:", refined_prompt)
 
-                # Store the image link
-                image_links.append(img_metadata['webViewLink'])
+                            # Generate image using Replicate API
+                            generated_image_url = replicate_client.run(
+                                st.secrets["REPLICATE_MODEL_ENDPOINTSTABILITY"],
+                                input={"prompt": refined_prompt}
+                            )[0]
+                            st.image(generated_image_url)
+
+                            # Explanation of how images informed the new generation
+                            explanation = (
+                                f"The new image was generated based on the analysis of the image. "
+                                f"The description of the image ({description}) was used to create a context, "
+                                f"and the detected emotions ({', '.join(emotions)}) helped shape the mood and tone of the new image. "
+                                f"You can view the original image that informed this generation here: [image]({image_links})."
+                            )
+                            st.write(explanation)
+                        else:
+                            st.write("DEBUG: Analysis and generation were not triggered.")
+                    else:
+                        st.write("DEBUG: No prompt provided.")
         else:
             st.write("DEBUG: No images found in the folder.")
-
-        if all_descriptions or all_emotions:
-            prompt = st.text_input("Enter your image creation prompt:")
-            if prompt:
-                combined_analysis = f"Image descriptions: {', '.join(all_descriptions)}. Detected emotions: {', '.join(all_emotions)}."
-
-                # Generate refined prompt using GPT-4o-mini
-                completion = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant."},
-                        {"role": "user", "content": f"Refine the following image creation prompt: {prompt} with analysis: {combined_analysis}"}
-                    ],
-                    max_tokens=50
-                )
-                refined_prompt = completion.choices[0].message.content.strip()
-                st.write("Refined Prompt:", refined_prompt)
-
-                # Generate image using Replicate API
-                generated_image_url = replicate_client.run(
-                    st.secrets["REPLICATE_MODEL_ENDPOINTSTABILITY"],
-                    input={"prompt": refined_prompt}
-                )[0]
-                st.image(generated_image_url)
-
-                # Explanation of how images informed the new generation
-                image_link_list = ', '.join([f"[image]({link})" for link in image_links])
-                explanation = (
-                    f"The new image was generated based on the analysis of the images in the selected folder. "
-                    f"The descriptions of the images ({', '.join(all_descriptions)}) were used to create a context, "
-                    f"and the detected emotions ({', '.join(all_emotions)}) helped shape the mood and tone of the new image. "
-                    f"You can view the original images that informed this generation here: {image_link_list}."
-                )
-                st.write(explanation)
-            else:
-                st.write("DEBUG: No prompt provided.")
-        else:
-            st.write("DEBUG: Descriptions or emotions were not captured correctly.")
+    else:
+        st.write("DEBUG: No folder ID provided.")
