@@ -66,6 +66,16 @@ def authenticate_google_drive(auth_code=None):
     else:
         return None
 
+# Outside of the cached function
+if "token" not in st.session_state:
+    auth_code = st.text_input("Enter the authorization code here:")
+    service = authenticate_google_drive(auth_code)
+    if service:
+        st.success("Successfully authenticated with Google Drive.")
+else:
+    service = authenticate_google_drive()
+    st.success("You are already authenticated with Google Drive.")
+
 @st.cache_data
 def list_images_in_folder(_service, folder_id):
     try:
@@ -242,7 +252,7 @@ def perform_style_transfer(content_image, style_image):
     output = model.run_style_transfer()
     return output
 
-# Authenticate and connect to Google Drive
+# Ensure Google Drive authentication
 service = authenticate_google_drive()
 
 if service:
