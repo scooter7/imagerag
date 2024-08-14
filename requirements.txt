@@ -1,8 +1,12 @@
 streamlit
 openai
 replicate
+torch
+torchvision
+transformers
 google-auth
 google-auth-oauthlib
 google-auth-httplib2
 google-api-python-client
 Pillow
+requests
