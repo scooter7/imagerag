@@ -37,7 +37,7 @@ def authenticate_google_drive():
     if "token" in st.session_state:
         creds = Credentials.from_authorized_user_info(st.session_state["token"])
     if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
+        if creds and creds expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             # Use InstalledAppFlow for the "installed" configuration
