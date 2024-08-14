@@ -36,7 +36,6 @@ emotion_model = pipeline("text-classification", model="j-hartmann/emotion-englis
 # Load client secret from Streamlit secrets
 client_secret = json.loads(st.secrets["google_drive_client_secret"])
 
-@st.cache_data
 def authenticate_google_drive(auth_code=None):
     creds = None
     if "token" in st.session_state:
@@ -53,8 +52,11 @@ def authenticate_google_drive(auth_code=None):
 
             if not auth_code:
                 auth_url, _ = flow.authorization_url(prompt='consent')
-                st.write("Please go to the following URL and authorize access:")
-                st.write(auth_url)
+                if "auth_url_displayed" not in st.session_state:
+                    st.session_state["auth_url_displayed"] = True
+                    st.write("Please go to the following URL and authorize access:")
+                    st.write(auth_url)
+                return None
             else:
                 flow.fetch_token(code=auth_code)
                 creds = flow.credentials
