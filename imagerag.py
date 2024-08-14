@@ -1,4 +1,6 @@
 import streamlit as st
+import openai
+import replicate
 import torch
 from transformers import CLIPProcessor, CLIPModel, pipeline
 from googleapiclient.discovery import build
@@ -9,12 +11,25 @@ import json
 from PIL import Image, ImageOps
 from io import BytesIO
 
+# Set up API keys using Streamlit secrets
+openai.api_key = st.secrets["openai_api_key"]
+replicate_api_key = st.secrets["replicate_api_key"]
+
+# Initialize the OpenAI client
+client = openai
+
+# Initialize the Replicate client with the API key
+replicate_client = replicate.Client(api_token=replicate_api_key)
+
 # Initialize CLIP model for image captioning
 clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
 clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
 # Initialize emotion detection pipeline using a lightweight model
 emotion_model = pipeline("image-classification", model="microsoft/swin-tiny-patch4-window7-224")
+
+# Load client secret from Streamlit secrets
+client_secret = json.loads(st.secrets["google_drive_client_secret"])
 
 def authenticate_google_drive():
     creds = None
@@ -24,12 +39,11 @@ def authenticate_google_drive():
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            # Use InstalledAppFlow for the "installed" configuration
             flow = InstalledAppFlow.from_client_config(
-                json.loads(st.secrets["google_drive_client_secret"]),
+                client_secret,
                 scopes=['https://www.googleapis.com/auth/drive']
             )
-            flow.redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
+            flow.redirect_uri = client_secret["installed"]["redirect_uris"][0]
 
             auth_url, _ = flow.authorization_url(prompt='consent')
             st.write("Please go to the following URL and authorize access:")
@@ -48,6 +62,13 @@ def authenticate_google_drive():
         st.error("Failed to authenticate with Google Drive.")
         return None
 
+def list_images_in_folder(folder_id, service):
+    results = service.files().list(
+        q=f"'{folder_id}' in parents and mimeType contains 'image/'",
+        pageSize=10, fields="files(id, name, webViewLink)").execute()
+    items = results.get('files', [])
+    return items
+
 def load_image(file_id, service):
     request = service.files().get_media(fileId=file_id)
     img_data = request.execute()
@@ -56,13 +77,10 @@ def load_image(file_id, service):
 
 def describe_image(image):
     try:
-        # Use CLIP to generate a description for the image
         inputs = clip_processor(images=image, return_tensors="pt")
         outputs = clip_model(**inputs)
         logits_per_image = outputs.logits_per_image
         probs = logits_per_image.softmax(dim=-1)
-        # For debugging, output the probabilities to see if it’s working
-        st.write(f"DEBUG: Probabilities from CLIP: {probs}")
         description = "a scenic landscape with mountains"  # Replace with actual logic
         st.write(f"DEBUG: Generated description: {description}")
         return description
@@ -72,7 +90,6 @@ def describe_image(image):
 
 def detect_emotions(image):
     try:
-        # Use the emotion model to detect emotions in the image
         predictions = emotion_model(image)
         emotions = [f"{pred['label']} ({pred['score']:.2f})" for pred in predictions]
         st.write(f"DEBUG: Detected emotions: {emotions}")
@@ -87,21 +104,62 @@ service = authenticate_google_drive()
 if service:
     folder_id = st.text_input("Enter the Google Drive folder ID:")
     if folder_id:
-        images_metadata = service.files().list(
-            q=f"'{folder_id}' in parents and mimeType contains 'image/'",
-            pageSize=1,  # Limit to 1 image for debugging
-            fields="files(id, name, webViewLink)"
-        ).execute().get('files', [])
+        images_metadata = list_images_in_folder(folder_id, service)
+        all_descriptions = []
+        all_emotions = []
+        image_links = []
 
-        if images_metadata:
-            img_metadata = images_metadata[0]  # Get the first image
+        for img_metadata in images_metadata:
             img = load_image(img_metadata['id'], service)
             st.image(img)
 
             # Image description
             description = describe_image(img)
+            if description:
+                all_descriptions.append(description)
             st.write("Description:", description)
 
             # Emotion analysis
             emotions = detect_emotions(img)
+            if emotions:
+                all_emotions.append(", ".join(emotions))
             st.write("Detected Emotions:", ", ".join(emotions))
+
+            # Store the image link
+            image_links.append(img_metadata['webViewLink'])
+
+        prompt = st.text_input("Enter your image creation prompt:")
+        if prompt:
+            combined_analysis = f"Image descriptions: {', '.join(all_descriptions)}. Detected emotions: {', '.join(all_emotions)}."
+
+            # Generate refined prompt using GPT-4o-mini
+            completion = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": f"Refine the following image creation prompt: {prompt} with analysis: {combined_analysis}"}
+                ],
+                max_tokens=50
+            )
+            refined_prompt = completion.choices[0].message.content.strip()
+            st.write("Refined Prompt:", refined_prompt)
+
+            # Generate image using Replicate API
+            generated_image_url = replicate_client.run(
+                st.secrets["REPLICATE_MODEL_ENDPOINTSTABILITY"],
+                input={"prompt": refined_prompt}
+            )[0]
+            st.image(generated_image_url)
+
+            # Explanation of how images informed the new generation
+            if all_descriptions and all_emotions:
+                image_link_list = ', '.join([f"[image]({link})" for link in image_links])
+                explanation = (
+                    f"The new image was generated based on the analysis of the images in the selected folder. "
+                    f"The descriptions of the images ({', '.join(all_descriptions)}) were used to create a context, "
+                    f"and the detected emotions ({', '.join(all_emotions)}) helped shape the mood and tone of the new image. "
+                    f"You can view the original images that informed this generation here: {image_link_list}."
+                )
+                st.write(explanation)
+            else:
+                st.write("DEBUG: Descriptions or emotions were not captured correctly.")
