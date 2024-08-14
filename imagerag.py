@@ -36,12 +36,12 @@ emotion_model = pipeline("text-classification", model="j-hartmann/emotion-englis
 client_secret = json.loads(st.secrets["google_drive_client_secret"])
 
 @st.cache_data
-def authenticate_google_drive():
+def authenticate_google_drive(auth_code=None):
     creds = None
     if "token" in st.session_state:
         creds = Credentials.from_authorized_user_info(st.session_state["token"])
     if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:  # Fixed syntax
+        if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_config(
@@ -54,7 +54,6 @@ def authenticate_google_drive():
             st.write("Please go to the following URL and authorize access:")
             st.write(auth_url)
 
-            auth_code = st.text_input("Enter the authorization code here:")
             if auth_code:
                 flow.fetch_token(code=auth_code)
                 creds = flow.credentials
@@ -66,6 +65,12 @@ def authenticate_google_drive():
     else:
         st.error("Failed to authenticate with Google Drive.")
         return None
+
+# Outside of the cached function
+auth_code = st.text_input("Enter the authorization code here:")
+
+# Pass the auth_code to the authenticate_google_drive function
+service = authenticate_google_drive(auth_code)
 
 @st.cache_data
 def list_images_in_folder(_service, folder_id):
